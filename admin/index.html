@@ -277,7 +277,10 @@
 
                 const presentRecs = attendance.filter(a => a.scheduled_member_id === m.id && a.status === 'Present');
                 const absentRecs = attendance.filter(a => a.scheduled_member_id === m.id && a.status === 'Absent');
-                const extraRecs = attendance.filter(a => a.actual_attendee_id === m.id && a.scheduled_member_id !== m.id);
+                const extraRecs = attendance.filter(a => 
+                    (a.actual_attendee_id === m.id && a.scheduled_member_id !== m.id) || 
+                    (a.actual_attendee_id === m.id && a.scheduled_member_id === null)
+                );
 
                 if (filter === 'perfect' && presentRecs.length < expectedSlots) return;
                 if (filter === 'warning' && absentRecs.length <= threshold) return;

@@ -29,8 +29,11 @@
         <header class="text-center mb-8 pt-4">
             <h1 id="dateDisplay" class="text-2xl font-bold text-blue-400"></h1>
             <p id="infoDisplay" class="text-slate-500 text-xs mt-1 uppercase tracking-widest font-black"></p>
-            <div id="massTabs" class="flex flex-wrap justify-center gap-2 mt-6"></div>
+            <button onclick="openSpecialMass()" class="bg-orange-600 text-white px-4 py-2 rounded-full text-[10px] font-black uppercase shadow-lg shadow-orange-900/40">
+                + Special Mass
+            </button>
             <button onclick="handleLogout()" class="text-xs font-bold text-slate-400 hover:text-red-500">LOGOUT</button>
+            <div id="massTabs" class="flex flex-wrap justify-center gap-2 mt-6"></div>
         </header>
 
         <div id="memberList" class="space-y-3">
@@ -126,6 +129,49 @@
             `).join('');
         }
 
+        let isSpecialMass = false;
+
+        async function openSpecialMass() {
+            isSpecialMass = true;
+            currentMass = prompt("Enter Mass Name (e.g., 'Feast Mass', 'Wedding', 'Extra 7AM'):", "Special Mass");
+            if (!currentMass) return;
+
+            // In Special Mass mode, EVERYONE is a candidate for Extra Credit
+            attendanceState = {};
+            allMembers.forEach(m => {
+                // Everyone starts as Absent; tapping them makes them 'Extra Credit'
+                attendanceState[m.id] = { status: 'Absent', subId: null, name: m.name };
+            });
+            
+            renderSpecialAttendanceList();
+        }
+
+        function renderSpecialAttendanceList() {
+            const container = document.getElementById('memberList');
+            document.getElementById('infoDisplay').innerText = "SPECIAL SESSION ENTRY";
+            
+            // Sort all members so the list is easy to navigate
+            container.innerHTML = allMembers.map(m => {
+                const state = attendanceState[m.id];
+                const isPresent = state.status === 'Extra Credit';
+                
+                return `
+                    <div onclick="toggleExtraCredit('${m.id}')" 
+                        class="flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${isPresent ? 'bg-orange-950/40 border-orange-500' : 'bg-slate-800/50 border-transparent'}">
+                        <p class="font-bold ${isPresent ? 'text-white' : 'text-slate-500'}">${m.name}</p>
+                        <span class="text-[10px] font-black uppercase ${isPresent ? 'text-orange-500' : 'text-slate-700'}">
+                            ${isPresent ? 'Extra Credit' : 'Tap to Add'}
+                        </span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function toggleExtraCredit(id) {
+            attendanceState[id].status = (attendanceState[id].status === 'Extra Credit') ? 'Absent' : 'Extra Credit';
+            renderSpecialAttendanceList();
+        }
+
         async function changeMass(t, btn) {
             currentMass = t;
             document.querySelectorAll('.mass-btn').forEach(b => b.className = 'mass-btn px-5 py-2 rounded-full text-xs font-black transition-all bg-slate-800 text-slate-500');
@@ -214,18 +260,32 @@
         function getMemberName(id) { return allMembers.find(m => m.id === id)?.name || "Unknown"; }
 
         async function submitAttendance() {
-            const records = Object.keys(attendanceState).map(id => ({
-                date: todayDate,
-                day_name: todayName,
-                mass_timing: currentMass,
-                scheduled_member_id: id,
-                actual_attendee_id: (attendanceState[id].status === 'Present') ? id : (attendanceState[id].status === 'Substituted' ? attendanceState[id].subId : null),
-                status: attendanceState[id].status
-            }));
+            const dateStr = now.toISOString().split('T')[0];
+            
+            // Create the records array
+            let records = Object.keys(attendanceState).map(id => {
+                const state = attendanceState[id];
+                
+                // If it's a Special Mass and they are Absent, return null (we will filter these out)
+                if (isSpecialMass && state.status === 'Absent') return null;
 
-            // Upsert (Update if exists, Insert if not) logic using Supabase
-            // We delete existing for this date/mass first to keep it clean
-            await db.from('attendance').delete().eq('date', todayDate).eq('mass_timing', currentMass);
+                return {
+                    date: dateStr,
+                    day_name: todayName,
+                    mass_timing: currentMass,
+                    scheduled_member_id: isSpecialMass ? null : id, // No one is "scheduled" for special masses
+                    actual_attendee_id: (state.status === 'Present' || state.status === 'Extra Credit') ? id : (state.status === 'Substituted' ? state.subId : null),
+                    status: isSpecialMass ? 'Extra Credit' : state.status
+                };
+            }).filter(record => record !== null); // This line removes the "extra" absents!
+
+            if (records.length === 0) {
+                alert("No attendance marked!");
+                return;
+            }
+
+            // Insert into Supabase (Clean existing records for this specific mass first)
+            await db.from('attendance').delete().eq('date', dateStr).eq('mass_timing', currentMass);
             const { error } = await db.from('attendance').insert(records);
             
             if (error) { alert("Error: " + error.message); return; }

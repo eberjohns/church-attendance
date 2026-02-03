@@ -85,42 +85,47 @@
 
             // 3. Render Member Rows
             allMembers.forEach(m => {
-                // Find if this person has ANY involvement this month (scheduled OR attended)
                 const hasSchedule = schedules.some(s => s.member_id === m.id);
                 const hasAttendance = attendance.some(a => a.scheduled_member_id === m.id || a.actual_attendee_id === m.id);
 
-                // If they have no schedule and didn't attend anything, we can hide them to save space
+                // Skip members with zero activity this month
                 if (!hasSchedule && !hasAttendance) return;
 
                 grid.appendChild(createCell(m.name, "sticky-col p-4 font-bold text-sm border-b border-slate-800 shadow-xl"));
                 
+                // --- START OF DATE LOOP ---
                 for (let d = 1; d <= daysInMonth; d++) {
                     const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
                     const dayName = daysOfWeek[new Date(year, month, d).getDay()];
                     const sunNum = Math.ceil(d / 7);
 
-                    // A. Is this their scheduled slot?
+                    // Is this a scheduled slot for this person?
                     const isScheduledSlot = schedules.some(s => 
                         s.member_id === m.id && 
                         s.day_of_week === dayName && 
                         (dayName !== "Sunday" || s.sunday_number === sunNum)
                     );
 
-                    // B. Look for attendance records for THIS person on THIS day
-                    // Case 1: They were the ones scheduled
-                    const scheduledRecord = attendance.find(a => a.scheduled_member_id === m.id && a.date === dateStr);
+                    // Check attendance records for this specific day
+                    const dayRecords = attendance.filter(a => a.date === dateStr);
                     
-                    // Case 2: They were a substitute for someone else
-                    const subRecord = attendance.find(a => a.actual_attendee_id === m.id && a.scheduled_member_id !== m.id && a.date === dateStr);
+                    // 1. Did they have a scheduled record?
+                    const scheduledRecord = dayRecords.find(a => a.scheduled_member_id === m.id);
+                    
+                    // 2. Did they attend a special mass (where no one was scheduled)?
+                    const specialRecord = dayRecords.find(a => a.actual_attendee_id === m.id && a.scheduled_member_id === null);
+
+                    // 3. Did they substitute for someone else?
+                    const subRecord = dayRecords.find(a => a.actual_attendee_id === m.id && a.scheduled_member_id !== m.id && a.scheduled_member_id !== null);
 
                     let statusClass = "";
                     let content = "";
 
+                    // LOGIC FOR SCHEDULED SLOTS
                     if (scheduledRecord) {
                         if (scheduledRecord.status === 'Present') statusClass = "status-present";
                         else if (scheduledRecord.status === 'Substituted') {
                             statusClass = "status-subbed";
-                            // Find who took their place
                             const fillerName = allMembers.find(mem => mem.id === scheduledRecord.actual_attendee_id)?.name || "";
                             const initials = fillerName.split(' ').map(n => n[0]).join('');
                             content = `<span class="text-[10px] font-black opacity-60">${initials}</span>`;
@@ -128,11 +133,11 @@
                         else if (scheduledRecord.status === 'Absent') statusClass = "status-absent";
                     }
 
-                    // C. Overlay Extra Credit (Yellow Dot) if they subbed for someone
-                    if (subRecord) {
+                    // LOGIC FOR EXTRA CREDIT (Substitutes OR Special Masses)
+                    if (subRecord || specialRecord) {
                         const subDot = `<div class="absolute -top-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border border-slate-900 flex items-center justify-center text-[8px] text-black font-bold">+</div>`;
                         content += subDot;
-                        // If they weren't scheduled but showed up as a sub, give the box a subtle "working" color
+                        // If they weren't scheduled but came, show a subtle background
                         if (!statusClass) statusClass = "bg-slate-800 border border-slate-700";
                     }
 
