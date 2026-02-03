@@ -66,8 +66,9 @@
             grid.innerHTML = "";
 
             // 1. Fetch Data
-            const { data: members } = await db.from('members').select('*').order('name');
+            const { data: allMembers } = await db.from('members').select('*').order('name');
             const { data: schedules } = await db.from('schedules').select('*');
+            
             const startDate = `${year}-${String(month+1).padStart(2,'0')}-01`;
             const endDate = `${year}-${String(month+1).padStart(2,'0')}-${daysInMonth}`;
             const { data: attendance } = await db.from('attendance').select('*').gte('date', startDate).lte('date', endDate);
@@ -82,41 +83,59 @@
             }
 
             // 3. Render Member Rows
-            members.forEach(m => {
+            allMembers.forEach(m => {
+                // Find if this person has ANY involvement this month (scheduled OR attended)
+                const hasSchedule = schedules.some(s => s.member_id === m.id);
+                const hasAttendance = attendance.some(a => a.scheduled_member_id === m.id || a.actual_attendee_id === m.id);
+
+                // If they have no schedule and didn't attend anything, we can hide them to save space
+                if (!hasSchedule && !hasAttendance) return;
+
                 grid.appendChild(createCell(m.name, "sticky-col p-4 font-bold text-sm border-b border-slate-800 shadow-xl"));
                 
                 for (let d = 1; d <= daysInMonth; d++) {
-                    const dateObj = new Date(year, month, d);
-                    const dayName = daysOfWeek[dateObj.getDay()];
                     const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                    const dayName = daysOfWeek[new Date(year, month, d).getDay()];
                     const sunNum = Math.ceil(d / 7);
 
-                    // Check if member is scheduled for ANY mass on this day
-                    const isScheduled = schedules.some(s => 
+                    // A. Is this their scheduled slot?
+                    const isScheduledSlot = schedules.some(s => 
                         s.member_id === m.id && 
                         s.day_of_week === dayName && 
                         (dayName !== "Sunday" || s.sunday_number === sunNum)
                     );
 
-                    // Check attendance records
-                    const records = attendance.filter(a => a.scheduled_member_id === m.id && a.date === dateStr);
+                    // B. Look for attendance records for THIS person on THIS day
+                    // Case 1: They were the ones scheduled
+                    const scheduledRecord = attendance.find(a => a.scheduled_member_id === m.id && a.date === dateStr);
                     
+                    // Case 2: They were a substitute for someone else
+                    const subRecord = attendance.find(a => a.actual_attendee_id === m.id && a.scheduled_member_id !== m.id && a.date === dateStr);
+
                     let statusClass = "";
                     let content = "";
 
-                    if (records.length > 0) {
-                        // Priority: If any mass was 'Present', show green. If 'Substituted', show blue.
-                        if (records.some(r => r.status === 'Present')) statusClass = "status-present";
-                        else if (records.some(r => r.status === 'Substituted')) statusClass = "status-subbed";
-                        else if (records.some(r => r.status === 'Absent')) statusClass = "status-absent";
+                    if (scheduledRecord) {
+                        if (scheduledRecord.status === 'Present') statusClass = "status-present";
+                        else if (scheduledRecord.status === 'Substituted') {
+                            statusClass = "status-subbed";
+                            // Find who took their place
+                            const fillerName = allMembers.find(mem => mem.id === scheduledRecord.actual_attendee_id)?.name || "";
+                            const initials = fillerName.split(' ').map(n => n[0]).join('');
+                            content = `<span class="text-[10px] font-black opacity-60">${initials}</span>`;
+                        }
+                        else if (scheduledRecord.status === 'Absent') statusClass = "status-absent";
                     }
 
-                    const cell = createCell(content, `h-10 w-10 m-auto rounded-lg transition-all ${isScheduled ? 'border-2 border-slate-700' : ''} ${statusClass}`);
-                    
-                    // Add Tooltip for Substitutes
-                    const subRecord = records.find(r => r.status === 'Substituted');
-                    if (subRecord) cell.title = "Substituted";
+                    // C. Overlay Extra Credit (Yellow Dot) if they subbed for someone
+                    if (subRecord) {
+                        const subDot = `<div class="absolute -top-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border border-slate-900 flex items-center justify-center text-[8px] text-black font-bold">+</div>`;
+                        content += subDot;
+                        // If they weren't scheduled but showed up as a sub, give the box a subtle "working" color
+                        if (!statusClass) statusClass = "bg-slate-800 border border-slate-700";
+                    }
 
+                    const cell = createCell(content, `relative h-10 w-10 m-auto rounded-lg flex items-center justify-center transition-all ${isScheduledSlot ? 'border-2 border-white/30' : ''} ${statusClass}`);
                     grid.appendChild(cell);
                 }
             });

@@ -3,124 +3,161 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Choir Admin - Schedule Manager</title>
+    <title>Choir Admin - Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-slate-50 text-slate-900 min-h-screen pb-20">
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+
+    <div id="loginOverlay" class="fixed inset-0 bg-slate-900 z-[100] flex items-center justify-center p-6">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-sm text-slate-900">
+            <h2 class="text-2xl font-black mb-2 text-center">Parish Admin</h2>
+            <p class="text-slate-500 text-sm mb-6 text-center">Please log in to manage attendance.</p>
+            
+            <input id="email" type="email" placeholder="Email" class="w-full border p-3 rounded-xl mb-3 outline-none focus:ring-2 focus:ring-blue-500">
+            <input id="password" type="password" placeholder="Password" class="w-full border p-3 rounded-xl mb-6 outline-none focus:ring-2 focus:ring-blue-500">
+            
+            <button onclick="handleLogin()" id="loginBtn" class="w-full bg-blue-600 text-white p-4 rounded-xl font-bold shadow-lg active:scale-95 transition-all">
+                Login
+            </button>
+            <p id="loginError" class="text-red-500 text-xs mt-4 hidden text-center"></p>
+        </div>
+    </div>
+
+    <nav class="bg-white border-b sticky top-0 z-20">
+        <div class="max-w-5xl mx-auto flex justify-between items-center px-6">
+            <div class="flex gap-8">
+                <button onclick="switchView('scheduler')" id="tab-scheduler" class="py-4 border-b-2 border-blue-600 text-blue-600 font-bold">Schedule Manager</button>
+                <button onclick="switchView('reports')" id="tab-reports" class="py-4 border-b-2 border-transparent text-slate-500 font-bold">Monthly Reports</button>
+            </div>
+            <button onclick="handleLogout()" class="text-xs font-bold text-slate-400 hover:text-red-500">LOGOUT</button>
+        </div>
+    </nav>
 
     <div class="max-w-5xl mx-auto p-6">
-        <h1 class="text-3xl font-black mb-8 text-slate-800 uppercase tracking-tight">Choir Admin Manager</h1>
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
+        <div id="view-scheduler" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div class="lg:col-span-1 bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
                 <h2 class="text-xl font-bold mb-4">Members</h2>
                 <div class="flex gap-2 mb-6">
-                    <input id="memberNameInput" type="text" placeholder="New Name..." class="flex-1 border-slate-200 border rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none">
-                    <button id="addMemberBtn" class="bg-blue-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-blue-700 transition">+</button>
+                    <input id="memberNameInput" type="text" placeholder="New Name..." class="flex-1 border-slate-200 border rounded-xl p-3 outline-none">
+                    <button id="addMemberBtn" onclick="addMember()" class="bg-blue-600 text-white px-5 py-3 rounded-xl font-bold">+</button>
                 </div>
-                <div id="memberList" class="space-y-2 max-h-[500px] overflow-y-auto pr-2">
-                    <p class="text-slate-400 text-sm italic">Loading members...</p>
-                </div>
+                <div id="memberList" class="space-y-2 max-h-[500px] overflow-y-auto"></div>
             </div>
 
-            <div class="lg:col-span-2 space-y-6">
+            <div class="lg:col-span-2">
                 <div id="scheduleSection" class="hidden bg-white p-8 rounded-3xl shadow-xl border border-blue-100">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="text-2xl font-bold text-blue-900">Assign Schedule</h2>
-                        <span class="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-bold uppercase" id="selectedMemberNameDisplay">No Member Selected</span>
+                        <span id="selectedMemberNameDisplay" class="text-sm bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-bold uppercase"></span>
                     </div>
-
-                    <div class="mb-8">
-                        <h3 class="text-sm font-black text-slate-400 uppercase mb-4 tracking-widest">Regular Week (Mon-Sat)</h3>
-                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4" id="weekdayMatrix"></div>
-                    </div>
-
-                    <div>
-                        <h3 class="text-sm font-black text-slate-400 uppercase mb-4 tracking-widest">Sundays (By Number)</h3>
-                        <div id="sundayMatrix" class="space-y-6"></div>
-                    </div>
+                    <div id="weekdayMatrix" class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8"></div>
+                    <div id="sundayMatrix" class="space-y-4"></div>
                 </div>
+                <div id="placeholder" class="py-20 bg-slate-100 rounded-3xl border-2 border-dashed text-center text-slate-400">Select a member to manage schedule</div>
+            </div>
+        </div>
 
-                <div id="placeholder" class="h-full flex flex-col items-center justify-center py-20 bg-slate-100 rounded-3xl border-2 border-dashed border-slate-200 text-slate-400">
-                    <p class="text-lg font-medium">Select a member to manage their schedule</p>
+        <div id="view-reports" class="hidden space-y-6">
+            <div class="flex justify-between items-center">
+                <h2 class="text-3xl font-black text-slate-800">Meeting Report</h2>
+                <input type="month" id="reportMonth" onchange="loadReportData()" class="border p-2 rounded-xl">
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white p-6 rounded-2xl border border-slate-200">
+                    <p class="text-slate-500 text-xs font-bold uppercase">Total Absences</p>
+                    <p id="stat-absents" class="text-3xl font-black text-red-600">0</p>
                 </div>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200">
+                    <p class="text-slate-500 text-xs font-bold uppercase">Extra Credits</p>
+                    <p id="stat-subs" class="text-3xl font-black text-blue-600">0</p>
+                </div>
+                <div class="bg-white p-6 rounded-2xl border border-slate-200">
+                    <p class="text-slate-500 text-xs font-bold uppercase">Call Outs (>3)</p>
+                    <p id="stat-warnings" class="text-3xl font-black text-orange-600">0</p>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+                <table class="w-full text-left">
+                    <thead class="bg-slate-50 border-b">
+                        <tr class="text-xs font-black text-slate-400 uppercase">
+                            <th class="p-4">Member Name</th>
+                            <th class="p-4">Absences</th>
+                            <th class="p-4">Subs</th>
+                            <th class="p-4 text-right">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportTableBody" class="divide-y divide-slate-100"></tbody>
+                </table>
             </div>
         </div>
     </div>
 
     <script>
-        // 1. CONFIGURATION - Replace with your details
         const SUPABASE_URL = 'https://gkhozoahwpqxhecoclpy.supabase.co';
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdraG96b2Fod3BxeGhlY29jbHB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxMTA0NjMsImV4cCI6MjA4NTY4NjQ2M30._lBdGbRDlpkbiUP65Cpong-c81MX6NlUH2k9IZ9I7XM';
-        
-        // Use 'db' instead of 'supabase' to avoid naming conflicts
         const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let members = [];
         let currentMemberId = null;
         let memberSchedules = [];
 
-        // 2. INITIALIZATION
-        document.addEventListener('DOMContentLoaded', () => {
+        // --- AUTH LOGIC ---
+        async function checkUser() {
+            const { data: { user } } = await db.auth.getUser();
+            if (user) {
+                document.getElementById('loginOverlay').classList.add('hidden');
+                init();
+            }
+        }
+
+        async function handleLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('loginBtn');
+            btn.innerText = "Wait...";
+            const { error } = await db.auth.signInWithPassword({ email, password });
+            if (error) {
+                document.getElementById('loginError').innerText = error.message;
+                document.getElementById('loginError').classList.remove('hidden');
+                btn.innerText = "Login";
+            } else { location.reload(); }
+        }
+
+        async function handleLogout() {
+            await db.auth.signOut();
+            location.reload();
+        }
+
+        // --- APP LOGIC ---
+        function init() {
+            const today = new Date();
+            document.getElementById('reportMonth').value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
             fetchMembers();
-            document.getElementById('addMemberBtn').addEventListener('click', addMember);
-        });
+        }
 
         async function fetchMembers() {
-            const { data, error } = await db.from('members').select('*').order('name');
-            if (data) {
-                members = data;
-                renderMemberList();
-            }
+            const { data } = await db.from('members').select('*').order('name');
+            if (data) { members = data; renderMemberList(); }
         }
 
         function renderMemberList() {
             const list = document.getElementById('memberList');
             list.innerHTML = members.map(m => `
-                <div onclick="selectMember('${m.id}', '${m.name}')" 
-                     class="group flex items-center justify-between p-4 rounded-2xl cursor-pointer transition-all ${currentMemberId === m.id ? 'bg-blue-600 text-white shadow-lg' : 'hover:bg-slate-100'}">
+                <div onclick="selectMember('${m.id}', '${m.name}')" class="p-4 rounded-2xl cursor-pointer ${currentMemberId === m.id ? 'bg-blue-600 text-white' : 'hover:bg-slate-100'}">
                     <span class="font-bold">${m.name}</span>
-                    <button onclick="deleteMember(event, '${m.id}')" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 px-2 font-bold">✕</button>
                 </div>
             `).join('');
         }
 
-        // 3. MEMBER CRUD
-        async function addMember() {
-            const nameInput = document.getElementById('memberNameInput');
-            const name = nameInput.value.trim();
-            if (!name) return;
-            
-            const { error } = await db.from('members').insert([{ name }]);
-            if (error) alert("Error adding member: " + error.message);
-            
-            nameInput.value = '';
-            fetchMembers();
-        }
-
-        async function deleteMember(e, id) {
-            e.stopPropagation();
-            if (!confirm("Delete member and all their schedule data?")) return;
-            
-            await db.from('members').delete().eq('id', id);
-            if (currentMemberId === id) {
-                currentMemberId = null;
-                document.getElementById('scheduleSection').classList.add('hidden');
-                document.getElementById('placeholder').classList.remove('hidden');
-            }
-            fetchMembers();
-        }
-
-        // 4. SCHEDULE MATRIX LOGIC
         async function selectMember(id, name) {
             currentMemberId = id;
             document.getElementById('selectedMemberNameDisplay').innerText = name;
             document.getElementById('scheduleSection').classList.remove('hidden');
             document.getElementById('placeholder').classList.add('hidden');
-            
-            renderMemberList(); // Highlight selection
+            renderMemberList();
             await fetchMemberSchedule();
             renderMatrix();
         }
@@ -134,72 +171,91 @@
             const weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
             const weekdayContainer = document.getElementById('weekdayMatrix');
             weekdayContainer.innerHTML = '';
-
             weekDays.forEach(day => {
                 let timings = (day === 'Thursday') ? ['6:00 AM', '5:00 PM'] : ['6:00 AM', '7:00 AM'];
-                
-                let dayCard = document.createElement('div');
-                dayCard.className = "p-4 bg-slate-50 rounded-2xl border border-slate-100";
-                dayCard.innerHTML = `<p class="font-black text-xs text-slate-400 mb-3">${day.toUpperCase()}</p>`;
-                
+                let card = document.createElement('div');
+                card.className = "p-4 bg-slate-50 rounded-2xl border border-slate-100";
+                card.innerHTML = `<p class="font-black text-[10px] text-slate-400 mb-2 uppercase">${day}</p>`;
                 timings.forEach(time => {
                     const isAssigned = memberSchedules.find(s => s.day_of_week === day && s.mass_timing === time);
                     const btn = document.createElement('button');
-                    btn.className = `w-full mb-2 p-2 rounded-xl text-xs font-bold transition-all ${isAssigned ? 'bg-blue-600 text-white shadow-md' : 'bg-white border text-slate-400'}`;
+                    btn.className = `w-full mb-1 p-2 rounded-lg text-[10px] font-bold ${isAssigned ? 'bg-blue-600 text-white' : 'bg-white border text-slate-400'}`;
                     btn.innerText = time;
                     btn.onclick = () => toggleSchedule(day, time, null);
-                    dayCard.appendChild(btn);
+                    card.appendChild(btn);
                 });
-                weekdayContainer.appendChild(dayCard);
+                weekdayContainer.appendChild(card);
             });
 
-            // Sunday Matrix
             const sunContainer = document.getElementById('sundayMatrix');
             sunContainer.innerHTML = '';
-            const sunTimings = ['6:00 AM', '10:00 AM', '4:00 PM'];
-
             for (let i = 1; i <= 5; i++) {
-                let sunRow = document.createElement('div');
-                sunRow.className = "flex flex-col md:flex-row md:items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100";
-                sunRow.innerHTML = `<p class="min-w-[100px] font-black text-sm text-blue-900">SUNDAY ${i}</p>`;
-                
-                let btnGroup = document.createElement('div');
-                btnGroup.className = "flex gap-2 flex-1";
-
-                sunTimings.forEach(time => {
+                let row = document.createElement('div');
+                row.className = "flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100";
+                row.innerHTML = `<p class="min-w-[80px] font-black text-[10px] text-blue-900 uppercase">Sunday ${i}</p>`;
+                ['6:00 AM', '10:00 AM', '4:00 PM'].forEach(time => {
                     const isAssigned = memberSchedules.find(s => s.sunday_number === i && s.day_of_week === 'Sunday' && s.mass_timing === time);
                     const btn = document.createElement('button');
-                    btn.className = `flex-1 p-3 rounded-xl text-xs font-bold transition-all ${isAssigned ? 'bg-blue-600 text-white shadow-md' : 'bg-white border text-slate-400'}`;
+                    btn.className = `flex-1 p-2 rounded-lg text-[10px] font-bold ${isAssigned ? 'bg-blue-600 text-white' : 'bg-white border text-slate-400'}`;
                     btn.innerText = time;
                     btn.onclick = () => toggleSchedule('Sunday', time, i);
-                    btnGroup.appendChild(btn);
+                    row.appendChild(btn);
                 });
-                sunRow.appendChild(btnGroup);
-                sunContainer.appendChild(sunRow);
+                sunContainer.appendChild(row);
             }
         }
 
         async function toggleSchedule(day, time, sunNum) {
-            const existing = memberSchedules.find(s => 
-                s.day_of_week === day && 
-                s.mass_timing === time && 
-                s.sunday_number === sunNum
-            );
-            
-            if (existing) {
-                await db.from('schedules').delete().eq('id', existing.id);
-            } else {
-                const { error } = await db.from('schedules').insert([{
-                    member_id: currentMemberId,
-                    day_of_week: day,
-                    mass_timing: time,
-                    sunday_number: sunNum
-                }]);
-                if (error) console.error(error);
-            }
-            await fetchMemberSchedule();
-            renderMatrix();
+            const existing = memberSchedules.find(s => s.day_of_week === day && s.mass_timing === time && s.sunday_number === sunNum);
+            if (existing) await db.from('schedules').delete().eq('id', existing.id);
+            else await db.from('schedules').insert([{ member_id: currentMemberId, day_of_week: day, mass_timing: time, sunday_number: sunNum }]);
+            await fetchMemberSchedule(); renderMatrix();
         }
+
+        async function addMember() {
+            const name = document.getElementById('memberNameInput').value.trim();
+            if (name) { await db.from('members').insert([{ name }]); document.getElementById('memberNameInput').value = ''; fetchMembers(); }
+        }
+
+        async function loadReportData() {
+            const monthVal = document.getElementById('reportMonth').value;
+            const startDate = `${monthVal}-01`;
+            const endDate = `${monthVal}-31`;
+            const { data: attendance } = await db.from('attendance').select('*').gte('date', startDate).lte('date', endDate);
+            
+            const tableBody = document.getElementById('reportTableBody');
+            tableBody.innerHTML = "";
+            let totalAbs = 0, totalEx = 0, totalWarn = 0;
+
+            members.forEach(m => {
+                const absents = attendance.filter(a => a.scheduled_member_id === m.id && a.status === 'Absent').length;
+                const extraCredits = attendance.filter(a => a.actual_attendee_id === m.id && a.scheduled_member_id !== m.id).length;
+                totalAbs += absents; totalEx += extraCredits; if (absents > 3) totalWarn++;
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="p-4 font-bold text-sm">${m.name}</td>
+                    <td class="p-4 text-red-600 font-bold">${absents}</td>
+                    <td class="p-4 text-blue-600 font-bold">${extraCredits}</td>
+                    <td class="p-4 text-right">
+                        ${absents > 3 ? '<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-black uppercase">Call Out</span>' : '<span class="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Normal</span>'}
+                    </td>`;
+                tableBody.appendChild(row);
+            });
+            document.getElementById('stat-absents').innerText = totalAbs;
+            document.getElementById('stat-subs').innerText = totalEx;
+            document.getElementById('stat-warnings').innerText = totalWarn;
+        }
+
+        function switchView(view) {
+            document.getElementById('view-scheduler').classList.toggle('hidden', view !== 'scheduler');
+            document.getElementById('view-reports').classList.toggle('hidden', view !== 'reports');
+            document.getElementById('tab-scheduler').className = view === 'scheduler' ? 'py-4 border-b-2 border-blue-600 text-blue-600 font-bold' : 'py-4 border-b-2 border-transparent text-slate-500 font-bold';
+            document.getElementById('tab-reports').className = view === 'reports' ? 'py-4 border-b-2 border-blue-600 text-blue-600 font-bold' : 'py-4 border-b-2 border-transparent text-slate-500 font-bold';
+            if (view === 'reports') loadReportData();
+        }
+
+        checkUser();
     </script>
 </body>
 </html>

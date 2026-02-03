@@ -9,11 +9,27 @@
 </head>
 <body class="bg-slate-900 text-white min-h-screen pb-40">
 
+    <div id="loginOverlay" class="fixed inset-0 bg-slate-900 z-[100] flex items-center justify-center p-6">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-sm text-slate-900">
+            <h2 class="text-2xl font-black mb-2 text-center">Parish Admin</h2>
+            <p class="text-slate-500 text-sm mb-6 text-center">Please log in to manage attendance.</p>
+            
+            <input id="email" type="email" placeholder="Email" class="w-full border p-3 rounded-xl mb-3 outline-none focus:ring-2 focus:ring-blue-500">
+            <input id="password" type="password" placeholder="Password" class="w-full border p-3 rounded-xl mb-6 outline-none focus:ring-2 focus:ring-blue-500">
+            
+            <button onclick="handleLogin()" id="loginBtn" class="w-full bg-blue-600 text-white p-4 rounded-xl font-bold shadow-lg active:scale-95 transition-all">
+                Login
+            </button>
+            <p id="loginError" class="text-red-500 text-xs mt-4 hidden text-center"></p>
+        </div>
+    </div>
+
     <div class="max-w-md mx-auto p-4">
         <header class="text-center mb-8 pt-4">
             <h1 id="dateDisplay" class="text-2xl font-bold text-blue-400"></h1>
             <p id="infoDisplay" class="text-slate-500 text-xs mt-1 uppercase tracking-widest font-black"></p>
             <div id="massTabs" class="flex flex-wrap justify-center gap-2 mt-6"></div>
+            <button onclick="handleLogout()" class="text-xs font-bold text-slate-400 hover:text-red-500">LOGOUT</button>
         </header>
 
         <div id="memberList" class="space-y-3">
@@ -61,6 +77,33 @@
         const now = new Date();
         const todayName = days[now.getDay()];
         const todayDate = now.toISOString().split('T')[0];
+
+        // --- AUTH LOGIC ---
+        async function checkUser() {
+            const { data: { user } } = await db.auth.getUser();
+            if (user) {
+                document.getElementById('loginOverlay').classList.add('hidden');
+                init();
+            }
+        }
+
+        async function handleLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('loginBtn');
+            btn.innerText = "Wait...";
+            const { error } = await db.auth.signInWithPassword({ email, password });
+            if (error) {
+                document.getElementById('loginError').innerText = error.message;
+                document.getElementById('loginError').classList.remove('hidden');
+                btn.innerText = "Login";
+            } else { location.reload(); }
+        }
+
+        async function handleLogout() {
+            await db.auth.signOut();
+            location.reload();
+        }
 
         async function init() {
             document.getElementById('dateDisplay').innerText = `${todayName}, ${now.toLocaleDateString('en-IN')}`;
@@ -210,7 +253,7 @@
 
         function hideSummary() { document.getElementById('summaryPanel').classList.add('hidden'); }
 
-        init();
+        checkUser();
     </script>
 </body>
 </html>
