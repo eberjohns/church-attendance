@@ -260,24 +260,26 @@
         function getMemberName(id) { return allMembers.find(m => m.id === id)?.name || "Unknown"; }
 
         async function submitAttendance() {
-            const dateStr = now.toISOString().split('T')[0];
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
             
-            // Create the records array
-            let records = Object.keys(attendanceState).map(id => {
+            console.log("Saving attendance for local date:", dateStr);
+
+            const records = Object.keys(attendanceState).map(id => {
                 const state = attendanceState[id];
-                
-                // If it's a Special Mass and they are Absent, return null (we will filter these out)
                 if (isSpecialMass && state.status === 'Absent') return null;
 
                 return {
-                    date: dateStr,
+                    date: dateStr, // Using the forced local date
                     day_name: todayName,
                     mass_timing: currentMass,
-                    scheduled_member_id: isSpecialMass ? null : id, // No one is "scheduled" for special masses
+                    scheduled_member_id: isSpecialMass ? null : id,
                     actual_attendee_id: (state.status === 'Present' || state.status === 'Extra Credit') ? id : (state.status === 'Substituted' ? state.subId : null),
                     status: isSpecialMass ? 'Extra Credit' : state.status
                 };
-            }).filter(record => record !== null); // This line removes the "extra" absents!
+            }).filter(record => record !== null);
 
             if (records.length === 0) {
                 alert("No attendance marked!");
