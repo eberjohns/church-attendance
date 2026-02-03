@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Choir Attendance - Monthly View</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        .grid-container { display: grid; grid-template-columns: 180px repeat(var(--days), 45px); }
+        .sticky-col { position: sticky; left: 0; background: #0f172a; z-index: 10; border-right: 1px solid #1e293b; }
+        .slot-assigned { border: 2px solid #ffffff; }
+        .status-present { background-color: #22c55e !important; } /* Green */
+        .status-absent { background-color: #ef4444 !important; }  /* Red */
+        .status-subbed { background-color: #3b82f6 !important; }  /* Blue */
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-200 min-h-screen">
+
+    <div class="p-4 md:p-8">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-black text-white uppercase tracking-tight">Attendance Grid</h1>
+                <p id="monthDisplay" class="text-blue-400 font-bold uppercase tracking-widest text-sm"></p>
+            </div>
+            <div class="flex gap-2 bg-slate-800 p-1 rounded-xl border border-slate-700">
+                <button onclick="changeMonth(-1)" class="px-4 py-2 hover:bg-slate-700 rounded-lg">←</button>
+                <button onclick="changeMonth(1)" class="px-4 py-2 hover:bg-slate-700 rounded-lg">→</button>
+            </div>
+        </header>
+
+        <div class="flex gap-6 mb-6 text-xs font-bold uppercase tracking-wider">
+            <div class="flex items-center gap-2"><div class="w-4 h-4 border-2 border-white"></div> Slot</div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-500"></div> Present</div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-red-500"></div> Absent</div>
+            <div class="flex items-center gap-2"><div class="w-4 h-4 bg-blue-500"></div> Substituted</div>
+        </div>
+
+        <div class="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
+            <div id="mainGrid" class="grid-container min-w-max">
+                </div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://gkhozoahwpqxhecoclpy.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdraG96b2Fod3BxeGhlY29jbHB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxMTA0NjMsImV4cCI6MjA4NTY4NjQ2M30._lBdGbRDlpkbiUP65Cpong-c81MX6NlUH2k9IZ9I7XM';
+        const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let currentViewDate = new Date();
+        const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+        async function init() {
+            await renderGrid();
+        }
+
+        async function renderGrid() {
+            const year = currentViewDate.getFullYear();
+            const month = currentViewDate.getMonth();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            
+            document.getElementById('monthDisplay').innerText = currentViewDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+            document.documentElement.style.setProperty('--days', daysInMonth);
+
+            const grid = document.getElementById('mainGrid');
+            grid.innerHTML = "";
+
+            // 1. Fetch Data
+            const { data: members } = await db.from('members').select('*').order('name');
+            const { data: schedules } = await db.from('schedules').select('*');
+            const startDate = `${year}-${String(month+1).padStart(2,'0')}-01`;
+            const endDate = `${year}-${String(month+1).padStart(2,'0')}-${daysInMonth}`;
+            const { data: attendance } = await db.from('attendance').select('*').gte('date', startDate).lte('date', endDate);
+
+            // 2. Render Header Row (Dates)
+            grid.appendChild(createCell("MEMBERS", "sticky-col font-black text-slate-500 p-4 text-xs"));
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dateObj = new Date(year, month, d);
+                const isSunday = dateObj.getDay() === 0;
+                grid.appendChild(createCell(`${d}<br><span class="text-[9px]">${daysOfWeek[dateObj.getDay()].slice(0,3)}</span>`, 
+                    `text-center py-3 font-bold text-xs ${isSunday ? 'text-blue-400 bg-blue-900/10' : 'text-slate-500'}`));
+            }
+
+            // 3. Render Member Rows
+            members.forEach(m => {
+                grid.appendChild(createCell(m.name, "sticky-col p-4 font-bold text-sm border-b border-slate-800 shadow-xl"));
+                
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const dateObj = new Date(year, month, d);
+                    const dayName = daysOfWeek[dateObj.getDay()];
+                    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                    const sunNum = Math.ceil(d / 7);
+
+                    // Check if member is scheduled for ANY mass on this day
+                    const isScheduled = schedules.some(s => 
+                        s.member_id === m.id && 
+                        s.day_of_week === dayName && 
+                        (dayName !== "Sunday" || s.sunday_number === sunNum)
+                    );
+
+                    // Check attendance records
+                    const records = attendance.filter(a => a.scheduled_member_id === m.id && a.date === dateStr);
+                    
+                    let statusClass = "";
+                    let content = "";
+
+                    if (records.length > 0) {
+                        // Priority: If any mass was 'Present', show green. If 'Substituted', show blue.
+                        if (records.some(r => r.status === 'Present')) statusClass = "status-present";
+                        else if (records.some(r => r.status === 'Substituted')) statusClass = "status-subbed";
+                        else if (records.some(r => r.status === 'Absent')) statusClass = "status-absent";
+                    }
+
+                    const cell = createCell(content, `h-10 w-10 m-auto rounded-lg transition-all ${isScheduled ? 'border-2 border-slate-700' : ''} ${statusClass}`);
+                    
+                    // Add Tooltip for Substitutes
+                    const subRecord = records.find(r => r.status === 'Substituted');
+                    if (subRecord) cell.title = "Substituted";
+
+                    grid.appendChild(cell);
+                }
+            });
+        }
+
+        function createCell(content, classes) {
+            const div = document.createElement('div');
+            div.className = classes;
+            div.innerHTML = content;
+            return div;
+        }
+
+        function changeMonth(dir) {
+            currentViewDate.setMonth(currentViewDate.getMonth() + dir);
+            renderGrid();
+        }
+
+        init();
+    </script>
+</body>
+</html>
