@@ -6,6 +6,12 @@
     <title>Choir Admin - Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
 
@@ -13,14 +19,24 @@
         <div class="bg-white p-8 rounded-3xl shadow-2xl w-full max-w-sm text-slate-900">
             <h2 class="text-2xl font-black mb-2 text-center">Parish Admin</h2>
             <p class="text-slate-500 text-sm mb-6 text-center">Please log in to manage attendance.</p>
-            
             <input id="email" type="email" placeholder="Email" class="w-full border p-3 rounded-xl mb-3 outline-none focus:ring-2 focus:ring-blue-500">
             <input id="password" type="password" placeholder="Password" class="w-full border p-3 rounded-xl mb-6 outline-none focus:ring-2 focus:ring-blue-500">
-            
-            <button onclick="handleLogin()" id="loginBtn" class="w-full bg-blue-600 text-white p-4 rounded-xl font-bold shadow-lg active:scale-95 transition-all">
-                Login
-            </button>
+            <button onclick="handleLogin()" id="loginBtn" class="w-full bg-blue-600 text-white p-4 rounded-xl font-bold shadow-lg active:scale-95 transition-all">Login</button>
             <p id="loginError" class="text-red-500 text-xs mt-4 hidden text-center"></p>
+        </div>
+    </div>
+
+    <div id="detailsModal" class="hidden fixed inset-0 bg-slate-900/90 z-[200] flex items-center justify-center p-6 backdrop-blur-sm">
+        <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div class="p-6 bg-slate-50 border-b flex justify-between items-center">
+                <div>
+                    <h3 id="modalMemberName" class="text-xl font-black text-slate-800"></h3>
+                    <p id="modalType" class="text-xs font-bold uppercase tracking-widest text-blue-600"></p>
+                </div>
+                <button onclick="closeProModal()" class="text-slate-400 hover:text-slate-600 font-bold text-xl">✕</button>
+            </div>
+            <div id="modalDateList" class="p-6 space-y-2 max-h-80 overflow-y-auto bg-white text-sm">
+                </div>
         </div>
     </div>
 
@@ -37,12 +53,12 @@
     <div class="max-w-5xl mx-auto p-6">
         <div id="view-scheduler" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div class="lg:col-span-1 bg-white p-6 rounded-3xl shadow-sm border border-slate-200">
-                <h2 class="text-xl font-bold mb-4">Members</h2>
+                <h2 class="text-xl font-bold mb-4 text-slate-800">Members</h2>
                 <div class="flex gap-2 mb-6">
-                    <input id="memberNameInput" type="text" placeholder="New Name..." class="flex-1 border-slate-200 border rounded-xl p-3 outline-none">
-                    <button id="addMemberBtn" onclick="addMember()" class="bg-blue-600 text-white px-5 py-3 rounded-xl font-bold">+</button>
+                    <input id="memberNameInput" type="text" placeholder="New Name..." class="flex-1 border-slate-200 border rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500">
+                    <button id="addMemberBtn" onclick="addMember()" class="bg-blue-600 text-white px-5 py-3 rounded-xl font-bold shadow-md">+</button>
                 </div>
-                <div id="memberList" class="space-y-2 max-h-[500px] overflow-y-auto"></div>
+                <div id="memberList" class="space-y-2 max-h-[500px] overflow-y-auto pr-2"></div>
             </div>
 
             <div class="lg:col-span-2">
@@ -54,44 +70,60 @@
                     <div id="weekdayMatrix" class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8"></div>
                     <div id="sundayMatrix" class="space-y-4"></div>
                 </div>
-                <div id="placeholder" class="py-20 bg-slate-100 rounded-3xl border-2 border-dashed text-center text-slate-400">Select a member to manage schedule</div>
+                <div id="placeholder" class="py-20 bg-slate-100 rounded-3xl border-2 border-dashed text-center text-slate-400 font-medium">Select a member to manage schedule</div>
             </div>
         </div>
 
         <div id="view-reports" class="hidden space-y-6">
-            <div class="flex justify-between items-center">
-                <h2 class="text-3xl font-black text-slate-800">Meeting Report</h2>
-                <input type="month" id="reportMonth" onchange="loadReportData()" class="border p-2 rounded-xl">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <h2 class="text-3xl font-black text-slate-800 tracking-tight">Meeting Reports</h2>
+                
+                <div class="flex flex-wrap items-center gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm w-full md:w-auto">
+                    <div class="flex flex-col">
+                        <label class="text-[9px] font-black text-slate-400 uppercase ml-1 mb-1">Month</label>
+                        <input type="month" id="reportMonth" onchange="loadReportData()" class="border-slate-200 border p-2 rounded-xl text-xs font-bold outline-none">
+                    </div>
+                    <div class="flex flex-col">
+                        <label class="text-[9px] font-black text-slate-400 uppercase ml-1 mb-1">Filter</label>
+                        <select id="viewFilter" onchange="loadReportData()" class="border-slate-200 border p-2 rounded-xl text-xs font-bold outline-none">
+                            <option value="all">All Members</option>
+                            <option value="perfect">Perfect Attendance</option>
+                            <option value="warning">Threshold Warning</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-col">
+                        <label class="text-[9px] font-black text-slate-400 uppercase ml-1 mb-1">Threshold</label>
+                        <input type="number" id="thresholdLimit" value="3" min="1" onchange="loadReportData()" class="w-16 border-slate-200 border p-2 rounded-xl text-xs font-bold outline-none text-center">
+                    </div>
+                </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-white p-6 rounded-2xl border border-slate-200">
-                    <p class="text-slate-500 text-xs font-bold uppercase">Total Absences</p>
-                    <p id="stat-absents" class="text-3xl font-black text-red-600">0</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-blue-600 p-6 rounded-2xl shadow-lg shadow-blue-200 text-white">
+                    <p class="text-blue-100 text-xs font-bold uppercase tracking-wider">Extra Credits (Total Subs)</p>
+                    <p id="stat-subs" class="text-4xl font-black mt-1">0</p>
                 </div>
-                <div class="bg-white p-6 rounded-2xl border border-slate-200">
-                    <p class="text-slate-500 text-xs font-bold uppercase">Extra Credits</p>
-                    <p id="stat-subs" class="text-3xl font-black text-blue-600">0</p>
-                </div>
-                <div class="bg-white p-6 rounded-2xl border border-slate-200">
-                    <p class="text-slate-500 text-xs font-bold uppercase">Call Outs (>3)</p>
-                    <p id="stat-warnings" class="text-3xl font-black text-orange-600">0</p>
+                <div class="bg-red-600 p-6 rounded-2xl shadow-lg shadow-red-200 text-white">
+                    <p class="text-red-100 text-xs font-bold uppercase tracking-wider">Warning Alerts</p>
+                    <p id="stat-warnings" class="text-4xl font-black mt-1">0</p>
                 </div>
             </div>
 
             <div class="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
-                <table class="w-full text-left">
-                    <thead class="bg-slate-50 border-b">
-                        <tr class="text-xs font-black text-slate-400 uppercase">
-                            <th class="p-4">Member Name</th>
-                            <th class="p-4">Attendance Ratio</th>
-                            <th class="p-4">Absences (Click to view)</th>
-                            <th class="p-4">Extra Credits (Click to view)</th>
-                            <th class="p-4 text-right">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="reportTableBody" class="divide-y divide-slate-100"></tbody>
-                </table>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-50 border-b">
+                            <tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                <th class="p-5">Member Name</th>
+                                <th class="p-5">Attendance Ratio</th>
+                                <th class="p-5">Absences</th>
+                                <th class="p-5">Extra Credits</th>
+                                <th class="p-5 text-right">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -105,7 +137,6 @@
         let currentMemberId = null;
         let memberSchedules = [];
 
-        // --- AUTH LOGIC ---
         async function checkUser() {
             const { data: { user } } = await db.auth.getUser();
             if (user) {
@@ -132,7 +163,6 @@
             location.reload();
         }
 
-        // --- APP LOGIC ---
         function init() {
             const today = new Date();
             document.getElementById('reportMonth').value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
@@ -147,7 +177,7 @@
         function renderMemberList() {
             const list = document.getElementById('memberList');
             list.innerHTML = members.map(m => `
-                <div onclick="selectMember('${m.id}', '${m.name}')" class="p-4 rounded-2xl cursor-pointer ${currentMemberId === m.id ? 'bg-blue-600 text-white' : 'hover:bg-slate-100'}">
+                <div onclick="selectMember('${m.id}', '${m.name}')" class="p-4 rounded-2xl cursor-pointer transition-all ${currentMemberId === m.id ? 'bg-blue-600 text-white shadow-md' : 'hover:bg-slate-100'}">
                     <span class="font-bold">${m.name}</span>
                 </div>
             `).join('');
@@ -180,7 +210,7 @@
                 timings.forEach(time => {
                     const isAssigned = memberSchedules.find(s => s.day_of_week === day && s.mass_timing === time);
                     const btn = document.createElement('button');
-                    btn.className = `w-full mb-1 p-2 rounded-lg text-[10px] font-bold ${isAssigned ? 'bg-blue-600 text-white' : 'bg-white border text-slate-400'}`;
+                    btn.className = `w-full mb-1 p-2 rounded-lg text-[10px] font-bold transition-all ${isAssigned ? 'bg-blue-600 text-white shadow-sm' : 'bg-white border text-slate-400'}`;
                     btn.innerText = time;
                     btn.onclick = () => toggleSchedule(day, time, null);
                     card.appendChild(btn);
@@ -197,7 +227,7 @@
                 ['6:00 AM', '10:00 AM', '4:00 PM'].forEach(time => {
                     const isAssigned = memberSchedules.find(s => s.sunday_number === i && s.day_of_week === 'Sunday' && s.mass_timing === time);
                     const btn = document.createElement('button');
-                    btn.className = `flex-1 p-2 rounded-lg text-[10px] font-bold ${isAssigned ? 'bg-blue-600 text-white' : 'bg-white border text-slate-400'}`;
+                    btn.className = `flex-1 p-2 rounded-lg text-[10px] font-bold transition-all ${isAssigned ? 'bg-blue-600 text-white shadow-sm' : 'bg-white border text-slate-400'}`;
                     btn.innerText = time;
                     btn.onclick = () => toggleSchedule('Sunday', time, i);
                     row.appendChild(btn);
@@ -219,101 +249,86 @@
         }
 
         async function loadReportData() {
-            const monthVal = document.getElementById('reportMonth').value; // e.g., "2026-02"
+            const monthVal = document.getElementById('reportMonth').value;
+            const filter = document.getElementById('viewFilter').value;
+            const threshold = parseInt(document.getElementById('thresholdLimit').value);
             const [year, month] = monthVal.split('-').map(Number);
-            
-            // Calculate first and last day correctly
             const startDate = `${monthVal}-01`;
             const lastDay = new Date(year, month, 0).getDate();
             const endDate = `${monthVal}-${lastDay}`;
 
-            console.log(`Fetching reports for: ${startDate} to ${endDate}`);
-
-            // 1. Fetch Data
-            const { data: attendance, error: attError } = await db.from('attendance')
-                .select('*')
-                .gte('date', startDate)
-                .lte('date', endDate);
-            
-            const { data: allSchedules, error: schError } = await db.from('schedules').select('*');
-
-            if (attError || schError) {
-                console.error("Supabase Error:", attError || schError);
-                return;
-            }
-
-            console.log("Attendance records found:", attendance.length);
+            const { data: attendance } = await db.from('attendance').select('*').gte('date', startDate).lte('date', endDate);
+            const { data: allSchedules } = await db.from('schedules').select('*');
 
             const tableBody = document.getElementById('reportTableBody');
             tableBody.innerHTML = "";
-            
-            let totalAbs = 0, totalEx = 0, totalWarn = 0;
+            let totalEx = 0, totalWarn = 0;
 
             members.forEach(m => {
-                // --- Calculate Designated Slots for this month ---
                 const memberSchedules = allSchedules.filter(s => s.member_id === m.id);
-                let totalDesignatedSlots = 0;
-
+                let expectedSlots = 0;
                 for (let d = 1; d <= lastDay; d++) {
                     const dateObj = new Date(year, month - 1, d);
                     const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dateObj.getDay()];
                     const sunNum = Math.ceil(d / 7);
-
-                    const isScheduled = memberSchedules.some(s => 
-                        s.day_of_week === dayName && 
-                        (dayName !== "Sunday" || s.sunday_number === sunNum)
-                    );
-                    if (isScheduled) totalDesignatedSlots++;
+                    if (memberSchedules.some(s => s.day_of_week === dayName && (dayName !== "Sunday" || s.sunday_number === sunNum))) expectedSlots++;
                 }
 
-                // --- Filter Attendance for this specific member ---
-                // We match by name or ID depending on how your state is stored
-                const presentRecords = attendance.filter(a => a.scheduled_member_id === m.id && a.status === 'Present');
-                const absentRecords = attendance.filter(a => a.scheduled_member_id === m.id && a.status === 'Absent');
-                const extraRecords = attendance.filter(a => a.actual_attendee_id === m.id && a.scheduled_member_id !== m.id);
+                const presentRecs = attendance.filter(a => a.scheduled_member_id === m.id && a.status === 'Present');
+                const absentRecs = attendance.filter(a => a.scheduled_member_id === m.id && a.status === 'Absent');
+                const extraRecs = attendance.filter(a => a.actual_attendee_id === m.id && a.scheduled_member_id !== m.id);
 
-                const presentCount = presentRecords.length;
-                const absentCount = absentRecords.length;
-                const extraCount = extraRecords.length;
+                if (filter === 'perfect' && presentRecs.length < expectedSlots) return;
+                if (filter === 'warning' && absentRecs.length <= threshold) return;
 
-                totalAbs += absentCount;
-                totalEx += extraCount;
-                if (absentCount > 3) totalWarn++;
+                totalEx += extraRecs.length;
+                if (absentRecs.length > threshold) totalWarn++;
 
-                // --- Create Row ---
                 const row = document.createElement('tr');
                 row.className = "hover:bg-slate-50 transition-colors";
                 row.innerHTML = `
-                    <td class="p-4 font-bold text-sm text-slate-700">${m.name}</td>
-                    <td class="p-4 text-slate-600 font-medium">${presentCount} / ${totalDesignatedSlots}</td>
-                    <td class="p-4">
-                        <button onclick='showDetails("${m.name}", "Absences", ${JSON.stringify(absentRecords.map(r => r.date))})' 
-                                class="text-red-600 font-bold hover:underline px-2 py-1 rounded bg-red-50">${absentCount}</button>
+                    <td class="p-5 font-bold text-sm text-slate-700">${m.name}</td>
+                    <td class="p-5 text-xs font-black text-slate-400">${presentRecs.length} / ${expectedSlots}</td>
+                    <td class="p-5">
+                        <button onclick='showProModal("${m.name}", "Absences", ${JSON.stringify(absentRecs.map(r => r.date))})' 
+                                class="px-3 py-1 rounded-lg bg-red-50 text-red-600 font-black text-xs hover:bg-red-100 transition-all">${absentRecs.length}</button>
                     </td>
-                    <td class="p-4">
-                        <button onclick='showDetails("${m.name}", "Extra Credits", ${JSON.stringify(extraRecords.map(r => r.date))})' 
-                                class="text-blue-600 font-bold hover:underline px-2 py-1 rounded bg-blue-50">${extraCount}</button>
+                    <td class="p-5">
+                        <button onclick='showProModal("${m.name}", "Extra Credits", ${JSON.stringify(extraRecs.map(r => r.date))})' 
+                                class="px-3 py-1 rounded-lg bg-blue-50 text-blue-600 font-black text-xs hover:bg-blue-100 transition-all">${extraRecs.length}</button>
                     </td>
-                    <td class="p-4 text-right">
-                        ${absentCount > 3 ? '<span class="bg-red-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase">Call Out</span>' : 
-                        (presentCount === totalDesignatedSlots && totalDesignatedSlots > 0 ? '<span class="bg-green-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase">Perfect</span>' : '<span class="text-slate-400 text-[10px] font-bold uppercase">Normal</span>')}
-                    </td>
-                `;
+                    <td class="p-5 text-right">
+                        ${absentRecs.length > threshold ? '<span class="text-[9px] font-black text-red-600 bg-red-100 px-2 py-1 rounded-md uppercase tracking-tighter">Call Out</span>' : 
+                          (presentRecs.length === expectedSlots && expectedSlots > 0 ? '<span class="text-[9px] font-black text-green-600 bg-green-100 px-2 py-1 rounded-md uppercase tracking-tighter">Perfect</span>' : '')}
+                    </td>`;
                 tableBody.appendChild(row);
             });
-
-            // Update the Summary Stats
-            document.getElementById('stat-absents').innerText = totalAbs;
             document.getElementById('stat-subs').innerText = totalEx;
             document.getElementById('stat-warnings').innerText = totalWarn;
         }
 
-        // 4. Detail Modal Logic
-        function showDetails(name, type, dates) {
-            if (dates.length === 0) return alert(`${name} has no ${type.toLowerCase()} for this month.`);
-            const dateList = dates.map(d => new Date(d).toLocaleDateString('en-IN', {day: 'numeric', month: 'short', weekday: 'short'})).join('\n');
-            alert(`${type} for ${name}:\n\n${dateList}`);
+        function showProModal(name, type, dates) {
+            document.getElementById('modalMemberName').innerText = name;
+            document.getElementById('modalType').innerText = type;
+            const list = document.getElementById('modalDateList');
+            list.innerHTML = "";
+            if (dates.length === 0) {
+                list.innerHTML = `<p class="text-slate-400 italic text-center py-4 text-xs">No records found.</p>`;
+            } else {
+                dates.forEach(d => {
+                    const dateObj = new Date(d);
+                    const dateStr = dateObj.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+                    list.innerHTML += `
+                        <div class="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100 mb-1">
+                            <span class="font-bold text-slate-700 text-xs">${dateStr}</span>
+                            <span class="w-1.5 h-1.5 rounded-full ${type === 'Absences' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]'}"></span>
+                        </div>`;
+                });
+            }
+            document.getElementById('detailsModal').classList.remove('hidden');
         }
+
+        function closeProModal() { document.getElementById('detailsModal').classList.add('hidden'); }
 
         function switchView(view) {
             document.getElementById('view-scheduler').classList.toggle('hidden', view !== 'scheduler');
