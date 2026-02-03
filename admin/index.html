@@ -84,8 +84,9 @@
                     <thead class="bg-slate-50 border-b">
                         <tr class="text-xs font-black text-slate-400 uppercase">
                             <th class="p-4">Member Name</th>
-                            <th class="p-4">Absences</th>
-                            <th class="p-4">Subs</th>
+                            <th class="p-4">Attendance Ratio</th>
+                            <th class="p-4">Absences (Click to view)</th>
+                            <th class="p-4">Extra Credits (Click to view)</th>
                             <th class="p-4 text-right">Status</th>
                         </tr>
                     </thead>
@@ -218,33 +219,100 @@
         }
 
         async function loadReportData() {
-            const monthVal = document.getElementById('reportMonth').value;
-            const startDate = `${monthVal}-01`;
-            const endDate = `${monthVal}-31`;
-            const { data: attendance } = await db.from('attendance').select('*').gte('date', startDate).lte('date', endDate);
+            const monthVal = document.getElementById('reportMonth').value; // e.g., "2026-02"
+            const [year, month] = monthVal.split('-').map(Number);
             
+            // Calculate first and last day correctly
+            const startDate = `${monthVal}-01`;
+            const lastDay = new Date(year, month, 0).getDate();
+            const endDate = `${monthVal}-${lastDay}`;
+
+            console.log(`Fetching reports for: ${startDate} to ${endDate}`);
+
+            // 1. Fetch Data
+            const { data: attendance, error: attError } = await db.from('attendance')
+                .select('*')
+                .gte('date', startDate)
+                .lte('date', endDate);
+            
+            const { data: allSchedules, error: schError } = await db.from('schedules').select('*');
+
+            if (attError || schError) {
+                console.error("Supabase Error:", attError || schError);
+                return;
+            }
+
+            console.log("Attendance records found:", attendance.length);
+
             const tableBody = document.getElementById('reportTableBody');
             tableBody.innerHTML = "";
+            
             let totalAbs = 0, totalEx = 0, totalWarn = 0;
 
             members.forEach(m => {
-                const absents = attendance.filter(a => a.scheduled_member_id === m.id && a.status === 'Absent').length;
-                const extraCredits = attendance.filter(a => a.actual_attendee_id === m.id && a.scheduled_member_id !== m.id).length;
-                totalAbs += absents; totalEx += extraCredits; if (absents > 3) totalWarn++;
+                // --- Calculate Designated Slots for this month ---
+                const memberSchedules = allSchedules.filter(s => s.member_id === m.id);
+                let totalDesignatedSlots = 0;
 
+                for (let d = 1; d <= lastDay; d++) {
+                    const dateObj = new Date(year, month - 1, d);
+                    const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dateObj.getDay()];
+                    const sunNum = Math.ceil(d / 7);
+
+                    const isScheduled = memberSchedules.some(s => 
+                        s.day_of_week === dayName && 
+                        (dayName !== "Sunday" || s.sunday_number === sunNum)
+                    );
+                    if (isScheduled) totalDesignatedSlots++;
+                }
+
+                // --- Filter Attendance for this specific member ---
+                // We match by name or ID depending on how your state is stored
+                const presentRecords = attendance.filter(a => a.scheduled_member_id === m.id && a.status === 'Present');
+                const absentRecords = attendance.filter(a => a.scheduled_member_id === m.id && a.status === 'Absent');
+                const extraRecords = attendance.filter(a => a.actual_attendee_id === m.id && a.scheduled_member_id !== m.id);
+
+                const presentCount = presentRecords.length;
+                const absentCount = absentRecords.length;
+                const extraCount = extraRecords.length;
+
+                totalAbs += absentCount;
+                totalEx += extraCount;
+                if (absentCount > 3) totalWarn++;
+
+                // --- Create Row ---
                 const row = document.createElement('tr');
+                row.className = "hover:bg-slate-50 transition-colors";
                 row.innerHTML = `
-                    <td class="p-4 font-bold text-sm">${m.name}</td>
-                    <td class="p-4 text-red-600 font-bold">${absents}</td>
-                    <td class="p-4 text-blue-600 font-bold">${extraCredits}</td>
+                    <td class="p-4 font-bold text-sm text-slate-700">${m.name}</td>
+                    <td class="p-4 text-slate-600 font-medium">${presentCount} / ${totalDesignatedSlots}</td>
+                    <td class="p-4">
+                        <button onclick='showDetails("${m.name}", "Absences", ${JSON.stringify(absentRecords.map(r => r.date))})' 
+                                class="text-red-600 font-bold hover:underline px-2 py-1 rounded bg-red-50">${absentCount}</button>
+                    </td>
+                    <td class="p-4">
+                        <button onclick='showDetails("${m.name}", "Extra Credits", ${JSON.stringify(extraRecords.map(r => r.date))})' 
+                                class="text-blue-600 font-bold hover:underline px-2 py-1 rounded bg-blue-50">${extraCount}</button>
+                    </td>
                     <td class="p-4 text-right">
-                        ${absents > 3 ? '<span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-[10px] font-black uppercase">Call Out</span>' : '<span class="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Normal</span>'}
-                    </td>`;
+                        ${absentCount > 3 ? '<span class="bg-red-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase">Call Out</span>' : 
+                        (presentCount === totalDesignatedSlots && totalDesignatedSlots > 0 ? '<span class="bg-green-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase">Perfect</span>' : '<span class="text-slate-400 text-[10px] font-bold uppercase">Normal</span>')}
+                    </td>
+                `;
                 tableBody.appendChild(row);
             });
+
+            // Update the Summary Stats
             document.getElementById('stat-absents').innerText = totalAbs;
             document.getElementById('stat-subs').innerText = totalEx;
             document.getElementById('stat-warnings').innerText = totalWarn;
+        }
+
+        // 4. Detail Modal Logic
+        function showDetails(name, type, dates) {
+            if (dates.length === 0) return alert(`${name} has no ${type.toLowerCase()} for this month.`);
+            const dateList = dates.map(d => new Date(d).toLocaleDateString('en-IN', {day: 'numeric', month: 'short', weekday: 'short'})).join('\n');
+            alert(`${type} for ${name}:\n\n${dateList}`);
         }
 
         function switchView(view) {
